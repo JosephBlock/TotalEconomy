@@ -25,29 +25,16 @@
 
 package com.erigitic.main;
 
-import com.erigitic.commands.AdminPayCommand;
-import com.erigitic.commands.BalanceCommand;
-import com.erigitic.commands.BalanceTopCommand;
-import com.erigitic.commands.JobCommand;
-import com.erigitic.commands.PayCommand;
-import com.erigitic.commands.SetBalanceCommand;
-import com.erigitic.commands.ShopCommand;
-import com.erigitic.commands.ViewBalanceCommand;
+import com.erigitic.commands.*;
 import com.erigitic.config.AccountManager;
 import com.erigitic.config.TECurrency;
 import com.erigitic.config.TECurrencyRegistryModule;
 import com.erigitic.jobs.JobManager;
-import com.erigitic.shops.PlayerShopInfo;
 import com.erigitic.shops.Shop;
-import com.erigitic.shops.ShopItem;
+import com.erigitic.shops.ImmutableShopData;
+import com.erigitic.shops.data.*;
+import com.erigitic.shops.ShopData;
 import com.erigitic.shops.ShopManager;
-import com.erigitic.shops.data.ImmutablePlayerShopInfoData;
-import com.erigitic.shops.data.ImmutableShopData;
-import com.erigitic.shops.data.ImmutableShopItemData;
-import com.erigitic.shops.data.PlayerShopInfoData;
-import com.erigitic.shops.data.ShopData;
-import com.erigitic.shops.data.ShopItemData;
-import com.erigitic.shops.data.ShopKeys;
 import com.erigitic.sql.SqlManager;
 import com.erigitic.util.MessageManager;
 import com.google.inject.Inject;
@@ -56,7 +43,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.Optional;
 import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
@@ -68,10 +54,12 @@ import org.spongepowered.api.config.ConfigDir;
 import org.spongepowered.api.config.DefaultConfig;
 import org.spongepowered.api.data.DataManager;
 import org.spongepowered.api.data.DataRegistration;
+import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.EventManager;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.Order;
+import org.spongepowered.api.event.game.GameRegistryEvent;
 import org.spongepowered.api.event.game.GameReloadEvent;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.event.game.state.GamePreInitializationEvent;
@@ -148,6 +136,8 @@ public class TotalEconomy {
     private boolean moneyCapEnabled = false;
     private BigDecimal moneyCap;
 
+    private DataRegistration<ShopData, ImmutableShopData> shopDataRegistration;
+
     @Listener
     public void preInit(GamePreInitializationEvent event) {
         totalEconomy = this;
@@ -183,7 +173,8 @@ public class TotalEconomy {
         }
 
         if (chestShopEnabled) {
-            shopManager = new ShopManager(this, accountManager, messageManager);
+            shopManager = new ShopManager();
+//            shopManager = new ShopManager(this, accountManager, messageManager);
         }
 
         // Allows for retrieving of all/individual currencies in Total Economy by other plugins
@@ -192,7 +183,6 @@ public class TotalEconomy {
 
     @Listener
     public void init(GameInitializationEvent event) {
-        createAndRegisterData();
         registerCommands();
         registerListeners();
     }
@@ -211,11 +201,6 @@ public class TotalEconomy {
         if (!databaseEnabled) {
             accountManager.saveConfiguration();
         }
-
-        // Remove PlayerShopInfoData from all online users
-        for (Player player : game.getServer().getOnlinePlayers()) {
-            checkForAndRemovePlayerShopInfoData(player);
-        }
     }
 
     @Listener
@@ -228,8 +213,6 @@ public class TotalEconomy {
         Player player = event.getTargetEntity();
 
         accountManager.getOrCreateAccount(player.getUniqueId());
-
-        checkForAndRemovePlayerShopInfoData(player);
     }
 
     /**
@@ -246,6 +229,28 @@ public class TotalEconomy {
         accountManager.reloadConfig();
     }
 
+    @Listener
+    public void onKeyRegistration(GameRegistryEvent.Register<Key<?>> event) {
+        event.register(ShopKeys.SHOP);
+    }
+
+    @Listener
+    public void onDataRegistration(GameRegistryEvent.Register<DataRegistration<?, ?>> event) {
+        final DataManager dataManager = Sponge.getDataManager();
+
+        dataManager.registerBuilder(Shop.class, new ShopBuilder());
+
+        shopDataRegistration = DataRegistration.builder()
+                .dataClass(ShopData.class)
+                .immutableClass(ImmutableShopData.class)
+                .dataImplementation(ShopDataImpl.class)
+                .immutableImplementation(ImmutableShopDataImpl.class)
+                .builder(new ShopDataBuilder())
+                .dataName("Shop Data")
+                .manipulatorId("shop")
+                .buildAndRegister(pluginContainer);
+    }
+
     /**
      * Load the default config file, totaleconomy.conf.
      */
@@ -259,45 +264,6 @@ public class TotalEconomy {
         } catch (IOException e) {
             logger.warn("[TE] Main configuration file could not be loaded/created/changed!", e);
         }
-    }
-
-    /**
-     * Create and register custom data.
-     */
-    private void createAndRegisterData() {
-        DataManager dm = Sponge.getDataManager();
-
-        dm.registerBuilder(Shop.class, new Shop.Builder());
-        dm.registerBuilder(ShopItem.class, new ShopItem.Builder());
-        dm.registerBuilder(PlayerShopInfo.class, new PlayerShopInfo.Builder());
-
-        DataRegistration.builder()
-                .dataClass(ShopData.class)
-                .immutableClass(ImmutableShopData.class)
-                .builder(new ShopData.Builder())
-                .manipulatorId("shop")
-                .dataName("shop")
-                .buildAndRegister(pluginContainer);
-
-        DataRegistration.builder()
-                .dataClass(ShopItemData.class)
-                .immutableClass(ImmutableShopItemData.class)
-                .builder(new ShopItemData.Builder())
-                .manipulatorId("shopitem")
-                .dataName("shopitem")
-                .buildAndRegister(pluginContainer);
-
-        DataRegistration.builder()
-                .dataClass(PlayerShopInfoData.class)
-                .immutableClass(ImmutablePlayerShopInfoData.class)
-                .builder(new PlayerShopInfoData.Builder())
-                .manipulatorId("playershopinfo")
-                .dataName("playershopinfo")
-                .buildAndRegister(pluginContainer);
-
-        // Load the ShopKeys class during init to avoid problems with potential async loading
-        @SuppressWarnings("unused")
-        Object unused = ShopKeys.PLAYER_SHOP_INFO;
     }
 
     /**
@@ -379,14 +345,6 @@ public class TotalEconomy {
         databaseEnabled = config.getNode("database", "enable").getBoolean(false);
         moneyCapEnabled = config.getNode("features", "moneycap", "enable").getBoolean(true);
         chestShopEnabled = config.getNode("features", "shops", "chestshop", "enable").getBoolean(true);
-    }
-
-    private void checkForAndRemovePlayerShopInfoData(Player player) {
-        Optional<PlayerShopInfo> playerShopInfoOpt = player.get(ShopKeys.PLAYER_SHOP_INFO);
-
-        if (playerShopInfoOpt.isPresent()) {
-            player.remove(ShopKeys.PLAYER_SHOP_INFO);
-        }
     }
 
     public static TotalEconomy getTotalEconomy() {
@@ -479,5 +437,9 @@ public class TotalEconomy {
 
     public SqlManager getSqlManager() {
         return sqlManager;
+    }
+
+    public Logger getLogger() {
+        return logger;
     }
 }
