@@ -16,6 +16,7 @@ import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.item.ItemTypes;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.text.Text;
+import org.spongepowered.api.text.format.TextColors;
 
 public class ShopCommand implements CommandExecutor  {
 
@@ -54,7 +55,7 @@ public class ShopCommand implements CommandExecutor  {
             ItemStack shopItem = ItemStack.builder()
                     .itemType(ItemTypes.CHEST)
                     .build();
-            shopItem.offer(Keys.DISPLAY_NAME, Text.of("PLACEHOLDER TEXT"));
+            shopItem.offer(Keys.DISPLAY_NAME, Text.builder("Shop [" + player.getName() + "]").color(TextColors.GOLD).build().toText());
 
             ShopData shopData = new ShopDataImpl();
             shopData.set(ShopKeys.SHOP, new Shop(player.getTransform(), player));
