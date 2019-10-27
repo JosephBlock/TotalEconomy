@@ -1,61 +1,57 @@
 package com.erigitic.shops;
 
-import com.erigitic.main.TotalEconomy;
 import com.erigitic.shops.data.ShopDataImpl;
 import com.erigitic.shops.data.ShopKeys;
 import org.spongepowered.api.block.tileentity.TileEntity;
-import org.spongepowered.api.data.key.Keys;
+import org.spongepowered.api.block.tileentity.carrier.Chest;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.block.ChangeBlockEvent;
-import org.spongepowered.api.event.block.InteractBlockEvent;
 import org.spongepowered.api.event.cause.EventContextKeys;
-import org.spongepowered.api.event.filter.cause.Root;
-import org.spongepowered.api.item.inventory.Inventory;
-import org.spongepowered.api.item.inventory.InventoryArchetypes;
-import org.spongepowered.api.item.inventory.ItemStackSnapshot;
-import org.spongepowered.api.item.inventory.property.InventoryTitle;
+import org.spongepowered.api.event.filter.cause.First;
+import org.spongepowered.api.event.item.inventory.ClickInventoryEvent;
+import org.spongepowered.api.item.inventory.*;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.format.TextColors;
+import org.spongepowered.api.text.serializer.TextSerializers;
 
 import java.util.Optional;
 
 public class ShopManager {
 
-    public static void open(Player player) {
-        Inventory inventory = Inventory.builder()
-                .of(InventoryArchetypes.DOUBLE_CHEST)
-                .property(InventoryTitle.PROPERTY_NAME, InventoryTitle.of(Text.of(TextColors.RED, "Shops")))
-                .withCarrier(player)
-                .build(TotalEconomy.getTotalEconomy());
-        player.openInventory(inventory);
-    }
-
     @Listener
-    public void onBlockPlaceDebug(ChangeBlockEvent.Place event, @Root Player player) {
-        ItemStackSnapshot item = event.getCause().getContext().get(EventContextKeys.USED_ITEM).get();
+    public void onBlockPlaceDebug(ChangeBlockEvent.Place event, @First Player player) {
+        ItemStackSnapshot usedItem = event.getCause().getContext().get(EventContextKeys.USED_ITEM).get();
+        Optional<Shop> usedItemShopData = usedItem.get(ShopKeys.SHOP);
 
-        // TODO: If item has ShopKeys.SHOP, then run code
+        if (!usedItemShopData.isPresent()) {
+            return;
+        }
 
         ShopData shopData = new ShopDataImpl();
-        shopData.set(ShopKeys.SHOP, item.get(ShopKeys.SHOP).get());
+        shopData.set(ShopKeys.SHOP, usedItemShopData.get());
 
         Optional<TileEntity> tileEntityOpt = event.getTransactions().get(0).getFinal().getLocation().get().getTileEntity();
         if (tileEntityOpt.isPresent()) {
-            TileEntity tileEntity = tileEntityOpt.get();
+            Chest tileEntity = (Chest) tileEntityOpt.get();
             tileEntity.offer(shopData);
-
-            TotalEconomy.getTotalEconomy().getLogger().info("" + event.getTransactions().get(0).getFinal().getLocation().get().getTileEntity().get().get(ShopKeys.SHOP).isPresent());
         }
     }
 
+    // Cancel every click event within a shop inventory
     @Listener
-    public void onBlockBreakDebug(InteractBlockEvent.Primary event) {
-        TotalEconomy.getTotalEconomy().getLogger().info("" + event.getTargetBlock().getLocation().get().getTileEntity().get().get(ShopKeys.SHOP).isPresent());
-    }
+    public void onShopClickDebug(ClickInventoryEvent event, @First Player player) {
+//        TODO: If owner, don't cancel event but remove pricing and amount data if item removed from shop
+//        TODO: If owner, only allow items that have been priced and amount has been set to be put into shop. Otherwise, cancel.
 
-//    inventory.builder().listener(AffectSlotEvent.class, event -> {
-//        //Code for when the event fires on the build inventory the builder provides
-//        //This gets around needing to check the event for if its your inventory
-//    }
+        String title = event.getTargetInventory().getName().get();
+        Text titleText = TextSerializers.LEGACY_FORMATTING_CODE.deserialize(title);
+
+        boolean isChest = (event.getTargetInventory().getArchetype() == InventoryArchetypes.CHEST || event.getTargetInventory().getArchetype() == InventoryArchetypes.DOUBLE_CHEST);
+        if (isChest && titleText.getColor().equals(TextColors.GOLD) && title.contains("Shop")) {
+            if (event.getContext().get(EventContextKeys.OWNER).get().getName() != player.getName()) {
+                event.setCancelled(true);
+            }
+        }
+    }
 }
