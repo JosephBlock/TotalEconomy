@@ -163,7 +163,6 @@ public class TotalEconomy {
 
         game.getServiceManager().setProvider(this, EconomyService.class, accountManager);
 
-        // Only create JobManager
         if (jobFeatureEnabled) {
             jobManager = new JobManager(this, accountManager, messageManager, logger);
         }
@@ -174,7 +173,6 @@ public class TotalEconomy {
 
         if (chestShopEnabled) {
             shopManager = new ShopManager();
-//            shopManager = new ShopManager(this, accountManager, messageManager);
         }
 
         // Allows for retrieving of all/individual currencies in Total Economy by other plugins
