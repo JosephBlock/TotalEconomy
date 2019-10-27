@@ -12,6 +12,6 @@ public class ShopKeys {
             .type(new TypeToken<Value<Shop>>() {})
             .id("shop")
             .name("shop")
-            .query(DataQuery.of("shop"))
+            .query(DataQuery.of("Shop"))
             .build();
 }
